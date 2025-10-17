@@ -110,7 +110,10 @@ def sample_batch(
     #                                                                       #
     # 힌트: torch.randint를 사용하여 인덱스를 생성하세요.                            #
     #########################################################################
-    pass
+    idx = torch.randint(num_train, (batch_size,))
+
+    X_batch = X[idx]
+    y_batch = y[idx]
     #########################################################################
     #                       코드 끝                                          #
     #########################################################################
@@ -176,7 +179,7 @@ def train_linear_classifier(
         # TODO:                                                                 #
         # gradient와 learning rate을 사용하여 weight를 업데이트하세요.                  #
         #########################################################################
-        pass
+        W -= learning_rate * grad
         #########################################################################
         #                       코드 끝                                         #
         #########################################################################
@@ -205,7 +208,9 @@ def predict_linear_classifier(W: torch.Tensor, X: torch.Tensor):
     # TODO:                                                                   #
     # 이 메서드를 구현하세요. 예측된 label을 y_pred에 저장하세요.                        #
     ###########################################################################
-    pass
+    scores = torch.mm(X, W)
+
+    y_pred = torch.argmax(scores, dim=1)
     ###########################################################################
     #                           코드 끝                                         #
     ###########################################################################
@@ -243,7 +248,30 @@ def softmax_loss_naive(
     # 구현 시 주의하지 않으면 수치적 불안정성(numerical instability)에 빠질 수 있습니다.      #
     # http://cs231n.github.io/linear-classify/ 의 Numeric Stability 항목 확인)     #
     #############################################################################
-    pass
+    num_train = X.shape[0]
+
+    scores = torch.mm(X, W)
+
+    for i in range(num_train):
+        score = scores[i]
+        score -= torch.max(score)
+
+        exp_score = torch.exp(score)
+        prob_score = exp_score / torch.sum(exp_score)
+
+        loss += -torch.log(prob_score[y[i]])
+
+        dscores = prob_score.clone()
+        dscores[y[i]] -= 1
+        dW += X[i].view(-1, 1).mm(dscores.view(1, -1))
+
+
+    loss /= num_train
+    dW /= num_train
+
+    loss += reg * torch.sum(W * W)
+    dW += 2 * reg * W
+
     #############################################################################
     #                          코드 끝                                            #
     #############################################################################
@@ -271,6 +299,25 @@ def softmax_loss_vectorized(
     # http://cs231n.github.io/linear-classify/ 의 Numeric Stability 항목 확인)     #
     #############################################################################
     num_train = X.shape[0]
+
+    scores = torch.mm(X, W)
+
+    scores -= torch.max(scores, dim=1, keepdim=True).values  
+    exp_scores = torch.exp(scores)
+    probs = exp_scores / torch.sum(exp_scores, dim=1, keepdim=True)
+
+    correct_class_probs = probs[torch.arange(num_train), y]
+    data_loss = torch.sum(-torch.log(correct_class_probs)) / num_train
+    reg_loss = reg * torch.sum(W * W)
+    loss = data_loss + reg_loss
+
+    dscores = probs.clone()
+    dscores[torch.arange(num_train), y] -= 1
+    dW = X.T.mm(dscores)
+    
+    dW /= num_train
+    dW += 2 * reg * W
+
     #############################################################################
     #                          코드 끝                                            #
     #############################################################################
@@ -293,7 +340,9 @@ def softmax_get_search_params():
     ###########################################################################
     # TODO: 자신만의 하이퍼파라미터 리스트를 추가하세요.                                 #
     ###########################################################################
-    pass
+    learning_rates = [2e-3, 5e-3, 7e-3, 9e-3, 3.5e-3]
+
+    regularization_strengths = [1e-3, 1e-2, 1e-1]
     ###########################################################################
     #                           코드 끝                                       #
     ###########################################################################
@@ -332,7 +381,17 @@ def test_one_param_set(
     # TODO:                                                                   #
     # 학습 데이터셋에서 모델을 학습시키고 학습 및 테스트셋에서 정확도를 계산하는 코드를 작성하세요.  #
     ###########################################################################
-    pass
+    cls.train(data_dict['X_train'],
+              data_dict['y_train'],
+              learning_rate=lr,
+              reg=reg,
+              num_iters=num_iters)
+    
+    y_train_pred = cls.predict(data_dict['X_train'])
+    train_acc = (y_train_pred == data_dict["y_train"]).double().mean().item()
+
+    y_val_pred = cls.predict(data_dict['X_val'])
+    val_acc = (y_val_pred == data_dict['y_val']).double().mean().item()
     ############################################################################
     #                            코드 끝                                        #
     ############################################################################
