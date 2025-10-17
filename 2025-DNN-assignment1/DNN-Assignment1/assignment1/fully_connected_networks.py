@@ -45,7 +45,11 @@ class Linear(object):
         # TODO: linear forward pass를 구현하세요. 결과는 out에 저장하세요.           #
         # 입력을 행으로 reshape 해야 합니다.                                       #
         ######################################################################
-        pass
+        N = x.shape[0]
+
+        reshaped_x = x.reshape(N, -1)
+
+        out = reshaped_x.mm(w) + b
         ######################################################################
         #                        코드 끝                                       #
         ######################################################################
@@ -74,7 +78,17 @@ class Linear(object):
         ##################################################
         # TODO: linear backward pass를 구현하세요.          #
         ##################################################
-        pass
+        N = x.shape[0]
+
+        reshaped_x = x.reshape(N, -1)
+
+        db = dout.sum(dim=0)
+
+        dw = reshaped_x.T.mm(dout)
+
+        reshaped_dx = dout.mm(w.T)
+
+        dx = reshaped_dx.reshape(x.shape)
         ##################################################
         #                코드 끝                           #
         ##################################################
@@ -100,7 +114,8 @@ class ReLU(object):
         # TODO: ReLU forward pass를 구현하세요.              #
         # 입력 tensor를 in-place 연산으로 변경해서는 안 됩니다.       #
         ###################################################
-        pass
+        zeros = torch.zeros_like(x)
+        out = torch.max(x, zeros)
         ###################################################
         #                 코드 끝                           #
         ###################################################
@@ -124,7 +139,9 @@ class ReLU(object):
         # TODO: ReLU backward pass를 구현하세요.               #
         # 입력 tensor를 in-place 연산으로 변경해서는 안 됩니다.         #
         #####################################################
-        pass
+        find = (x > 0)
+
+        dx = dout * find
         #####################################################
         #                  코드 끝                            #
         #####################################################
@@ -200,7 +217,13 @@ class TwoLayerNet(object):
         # 첫 번째 layer의 weight와 bias은 'W1'과 'b1' 키를,                    #      
         # 두 번째 layer의 weight와 bias은 'W2'와 'b2' 키를 사용합니다.            #
         ###################################################################
-        pass
+        self.params['W1'] = torch.randn(input_dim, hidden_dim, dtype=dtype, device=device) * weight_scale
+
+        self.params['W2'] = torch.randn(hidden_dim, num_classes, dtype=dtype, device=device) * weight_scale
+
+        self.params['b1'] = torch.zeros(hidden_dim, dtype=dtype, device=device)
+
+        self.params['b2'] = torch.zeros(num_classes, dtype=dtype, device=device)
         ###############################################################
         #                        코드 끝                             #
         ###############################################################
@@ -244,7 +267,13 @@ class TwoLayerNet(object):
         # TODO: 2-layer 신경망에 대한 forward pass를 구현하여,            #
         # X에 대한 class score를 계산하고 scores 변수에 저장하세요.          #
         #############################################################
-        pass
+        W1, b1 = self.params['W1'], self.params['b1']
+        W2, b2 = self.params['W2'], self.params['b2']
+
+        preReLU_h1, cache = Linear.forward(X, W1, b1)
+        h1, cache_relu = ReLU.forward(preReLU_h1)
+
+        scores, cache2 = Linear.forward(h1, W2, b2)
         ##############################################################
         #                     코드 끝                                  #
         ##############################################################
@@ -264,7 +293,24 @@ class TwoLayerNet(object):
         # 참고: 구현이 자동화된 test를 통과하려면                                 #
         # L2 regularization에 0.5 계수를 포함하지 않도록 하세요.                  #
         ###################################################################
-        pass
+        data_loss, dscores = softmax_loss(scores, y)
+
+        reg_loss = self.reg * (torch.sum(W1 * W1) + torch.sum(W2 * W2))
+
+        loss = data_loss + reg_loss
+
+        dh1, dW2, db2 = Linear.backward(dscores, cache2)
+
+        preReLU_dh1 = ReLU.backward(dh1, cache_relu)
+        dX, dW1, db1 = Linear.backward(preReLU_dh1, cache)
+
+        dW1 += 2 * self.reg * W1
+        dW2 += 2 * self.reg * W2
+
+        grads['W1'] = dW1
+        grads['W2'] = dW2
+        grads['b1'] = db1
+        grads['b2'] = db2
         ###################################################################
         #                     코드 끝                                       #
         ###################################################################
@@ -309,7 +355,20 @@ class FullyConnectedNet(object):
         # weight는 weight_scale과 동일한 표준편차를 갖는 0 중심의 정규 분포에서 초기화해야 합니다. #
         # bias은 0으로 초기화해야 합니다.                                                #
         ############################################################################
-        pass
+        layer_dims = [input_dim] + hidden_dims
+        for i in range(self.num_layers - 1):
+            idx = i + 1
+            dim_in = layer_dims[i]
+            dim_out = layer_dims[i+1]
+
+            self.params[f'W{idx}'] = torch.randn(dim_in, dim_out, dtype=dtype, device=device) * weight_scale
+            self.params[f'b{idx}'] = torch.zeros(dim_out, dtype=dtype, device=device)
+
+        idx = self.num_layers
+        dim_in = layer_dims[-1]
+        dim_out = num_classes
+        self.params[f'W{idx}'] = torch.randn(dim_in, dim_out, dtype=dtype, device=device) * weight_scale
+        self.params[f'b{idx}'] = torch.zeros(dim_out, dtype=dtype, device=device)
         #######################################################################
         #                         코드 끝                                       #
         #######################################################################
@@ -350,7 +409,20 @@ class FullyConnectedNet(object):
         # TODO: fully-connected net에 대한 forward pass를 구현하여,           #
         # X에 대한 class score를 계산하고 scores 변수에 저장하세요.               #
         ##################################################################
-        pass
+        caches = {}
+        cur_input = X
+
+        for i in range(self.num_layers - 1):
+            idx = i + 1
+            W = self.params[f'W{idx}']
+            b = self.params[f'b{idx}']
+
+            cur_input, caches[idx] = Linear_ReLU.forward(cur_input, W, b)
+
+        idx = self.num_layers
+        W = self.params[f'W{idx}']
+        b = self.params[f'b{idx}']
+        scores, caches[idx] = Linear.forward(cur_input, W, b)
         #################################################################
         #                      코드 끝                                    #
         #################################################################
@@ -370,7 +442,35 @@ class FullyConnectedNet(object):
         # 참고: 구현이 자동화된 test를 통과하려면                                   #
         # L2 regularization에 0.5 계수를 포함하지 않도록 하세요.                    #
         #####################################################################
-        pass
+        data_loss, dscores = softmax_loss(scores, y)
+
+        reg_loss = 0.0
+        for i in range(1, self.num_layers + 1):
+            W = self.params[f'W{i}']
+            reg_loss += torch.sum(W * W)
+        reg_loss *= self.reg
+
+        loss = data_loss + reg_loss
+
+        idx = self.num_layers
+        dout = dscores 
+        W = self.params[f'W{idx}']
+        cache = caches[idx]
+
+        dout, dW, db = Linear.backward(dout, cache)
+
+        grads[f'W{idx}'] = dW + 2 * self.reg * W
+        grads[f'b{idx}'] = db
+
+        for i in range(self.num_layers - 1, 0, -1):
+            idx = i
+            W = self.params[f'W{idx}']
+            cache = caches[idx]
+
+            dout, dW, db = Linear_ReLU.backward(dout, cache)
+
+            grads[f'W{idx}'] = dW + 2 * self.reg * W
+            grads[f'b{idx}'] = db
         ###########################################################
         #                   코드 끝                                 #
         ###########################################################
@@ -384,7 +484,10 @@ def create_solver_instance(data_dict, dtype, device):
     # TODO: Solver 인스턴스를 생성하세요.                             #
     #############################################################
     solver = None
-    pass
+    
+    solver = Solver(model, data_dict, num_epochs=19, batch_size=64, update_rule=sgd,
+                    optim_config = {'learning_rate' : 0.75,}, lr_decay=0.95, verbose=True,
+                    print_every=100, device=device)
     ##############################################################
     #                    코드 끝                                  #
     ##############################################################
@@ -396,8 +499,8 @@ def get_three_layer_network_params():
     # TODO: weight_scale과 learning_rate를 변경해 training accuracy를 #
     # 100% 달성할 수 있도록 합니다.                                     #
     ###############################################################
-    weight_scale = 1e-2   # Experiment with this!
-    learning_rate = 1e-4  # Experiment with this!
+    weight_scale = 5e-2   # Experiment with this!
+    learning_rate = 5e-1  # Experiment with this!
     ################################################################
     #                             코드 끝                           #
     ################################################################
@@ -409,8 +512,8 @@ def get_five_layer_network_params():
     # TODO: weight_scale과 learning_rate를 변경해 training accuracy를 #
     # 100% 달성할 수 있도록 합니다.                                     #
     ###############################################################
-    weight_scale = 1e-2   # Experiment with this!
-    learning_rate = 1e-4  # Experiment with this!
+    weight_scale = 7e-2   # Experiment with this!
+    learning_rate = 4.8e-1  # Experiment with this!
     ################################################################
     #                       코드 끝                                 #
     ################################################################
@@ -453,7 +556,9 @@ def sgd_momentum(w, dw, config=None):
     # 업데이트된 값은 next_w 변수에 저장하세요.                               #
     # 또한 velocity v를 사용하고 업데이트해야 합니다.                         #
     ##################################################################
-    pass
+    v = config['momentum'] * v - config['learning_rate'] * dw
+
+    next_w = w + v
     ###################################################################
     #                           코드 끝                                #
     ###################################################################
@@ -482,7 +587,9 @@ def rmsprop(w, dw, config=None):
     # TODO: RMSprop 업데이트 공식을 구현하고, w의 다음 값을 next_w 변수에 저장하세요.      #
     # config['cache']에 저장된 캐시 값을 업데이트하는 것을 잊지 마세요.                  #
     ###########################################################################
-    pass
+    config['cache'] = config['decay_rate'] * config['cache'] + (1 - config['decay_rate']) * (dw ** 2)
+
+    next_w = w - config['learning_rate'] * dw / (torch.sqrt(config['cache']) + config['epsilon'])
     ###########################################################################
     #                             코드 끝                                       #
     ###########################################################################
@@ -518,7 +625,17 @@ def adam(w, dw, config=None):
     #                                                                        #
     # 참고: 계산에 t를 사용하기 전에 t를 수정하세요.                                   #
     ##########################################################################
-    pass
+    config['t'] += 1
+    t = config['t']
+
+    config['m'] = config['beta1'] * config['m'] + (1 - config['beta1']) * dw
+
+    config['v'] = config['beta2'] * config['v'] + (1 - config['beta2']) * (dw ** 2)
+
+    m_hat = config['m'] / (1 - config['beta1'] ** t)
+    v_hat = config['v'] / (1 - config['beta2'] ** t)
+
+    next_w = w - config['learning_rate'] * m_hat / (torch.sqrt(v_hat) + config['epsilon'])
     #########################################################################
     #                              코드 끝                                    #
     #########################################################################
