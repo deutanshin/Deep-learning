@@ -129,7 +129,12 @@ def nn_forward_pass(params: Dict[str, torch.Tensor], X: torch.Tensor):
     # TODO: 입력에 대한 class score를 계산하는 forward pass를 수행하세요.               #
     # 결과를 scores 변수에 저장하며 이 변수는 (N, C) shape의 tensor여야 합니다.           #
     ############################################################################
-    pass
+    first_linear_network = torch.mm(X, W1) + b1
+
+    zeros = torch.zeros_like(first_linear_network)
+    hidden = torch.max(first_linear_network, zeros)
+
+    scores = torch.mm(hidden, W2) + b2
     ###########################################################################
     #                             코드 끝                                     #
     ###########################################################################
@@ -188,7 +193,20 @@ def nn_forward_backward(
     # Loss function은 Softmax cross-entropy loss를 사용합니다.                     #
     # W에 대한 regularization를 구현할 때, regularization 항에 1/2을 곱하지 마세요       #
     ############################################################################
-    pass
+    scores_to_stable = scores - torch.max(scores, dim=1, keepdim=True).values
+    
+    exp_scores = torch.exp(scores_to_stable)
+    
+    probs = exp_scores / torch.sum(exp_scores, dim=1, keepdim=True)
+
+    class_probs = probs[torch.arange(N), y]
+
+    data_loss = torch.sum(-torch.log(class_probs)) / N
+
+    reg_loss = reg * torch.sum(W1 * W1) + reg * torch.sum(W2 * W2)
+
+    loss = data_loss + reg_loss
+
     ###########################################################################
     #                             코드 끝                                     #
     ###########################################################################
@@ -200,7 +218,22 @@ def nn_forward_backward(
     # 결과를 grads 딕셔너리에 저장하세요. 예를 들어, grads['W1']은 W1에 대한              #
     # gradient를 저장해야 하며, 동일한 크기의 tensor여야 합니다.                        #
     ###########################################################################
-    pass
+    dscores = probs.clone()
+    dscores[torch.arange(N), y] -= 1
+    dscores /= N
+
+    grads['W2'] = h1.T.mm(dscores)
+    grads['b2'] = dscores.sum(dim=0)
+    dh1 = dscores.mm(W2.T)
+
+    activation = dh1 * (h1 > 0)
+
+    grads['W1'] = X.T.mm(activation)
+    grads['b1'] = activation.sum(dim=0)
+
+    grads['W1'] += 2 * reg * W1
+    grads['W2'] += 2 * reg * W2
+
     ###########################################################################
     #                             코드 끝                                     #
     ###########################################################################
@@ -278,7 +311,8 @@ def nn_train(
         # 파라미터를 SGD 기법을 사용하여 업데이트하세요.                                   #      
         # 위에서 정의된 grads 딕셔너리에 저장된 gradient를 사용해야 합니다.                  #
         #########################################################################
-        pass
+        for p in params:
+            params[p] -= learning_rate * grads[p]
         #########################################################################
         #                             코드 끝                                   #
         #########################################################################
@@ -334,7 +368,9 @@ def nn_predict(
     ###########################################################################
     # TODO: 이 함수를 구현하세요. 매우 간단해야 합니다!                                 #
     ###########################################################################
-    pass
+    scores = loss_func(params, X, y=None, reg=0.0)
+
+    y_pred = torch.argmax(scores, dim=1)
     ###########################################################################
     #                              코드 끝                                    #
     ###########################################################################
