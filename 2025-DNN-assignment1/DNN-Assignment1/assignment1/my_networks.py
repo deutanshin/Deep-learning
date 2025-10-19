@@ -10,7 +10,29 @@ class MyNet(nn.Module):
         ##############################################################
         # TODO: implement forward pass
         ##############################################################
-        pass
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        
+        self.fc_layers = nn.Sequential(
+            nn.Linear(256 * 4 * 4, 128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.5),
+            nn.Linear(128, 10)
+        )
         ##############################################################
         # END OF YOUR CODE
         ##############################################################
@@ -19,6 +41,12 @@ class MyNet(nn.Module):
         ##############################################################
         # TODO: implement forward pass
         ##############################################################
+        x = self.conv_layers(x)
+        
+        x = x.view(x.size(0), -1) 
+        
+        x = self.fc_layers(x)
+
         return x
         ##############################################################
         # END OF YOUR CODE
@@ -27,14 +55,38 @@ class MyNet(nn.Module):
 class Solver:
     def __init__(
         self,
-        # add your hyper-parameters here
+        lr=3e-3,           
+        epochs=40,         
+        batch_size=32,
+        weight_decay=1e-4,     
         device=None,
     ):
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         ##############################################################
         # TODO: implement solver initialization
         ##############################################################
-        pass
+        self.lr = lr
+        self.epochs = epochs
+        self.batch_size = batch_size
+
+        self.model = MyNet().to(self.device)
+
+        self.loss_func = nn.CrossEntropyLoss()
+        
+        self.optimizer = torch.optim.AdamW(
+            self.model.parameters(), lr=self.lr, weight_decay=weight_decay
+        )
+
+
+        transform = T.Compose([T.ToTensor()])
+        _train_set = tv.datasets.CIFAR10("./", train=True, download=True, transform=transform)
+        
+        _temp_loader = torch.utils.data.DataLoader(_train_set, batch_size=batch_size)
+        total_steps = len(_temp_loader) * epochs
+
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            self.optimizer, max_lr=self.lr, total_steps=total_steps
+        )
         ##############################################################
         # END OF YOUR CODE
         ##############################################################
@@ -57,7 +109,13 @@ class Solver:
                 ##########################################################
                 # TODO: implement training loop
                 ##########################################################
-                pass
+                x, y = x.to(self.device), y.to(self.device)
+                self.optimizer.zero_grad()
+                logits = self.model(x)
+                loss = self.loss_func(logits, y)
+                loss.backward()
+                self.optimizer.step()
+                self.scheduler.step() 
                 ##########################################################
                 # END OF YOUR CODE
                 ##########################################################
